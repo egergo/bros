@@ -6,12 +6,13 @@ on:
       - main
       - master
   schedule:
-      - cron: '0 2 * * 0'
+      - cron: '35 */1 * * *'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  BASE_IMAGE: quay.io/fedora-ostree-desktops/kinoite:44
 
 jobs:
   build:
@@ -35,10 +36,52 @@ jobs:
         with:
           driver: docker-container
 
+      - name: Get current base image digest
+        id: base-digest
+        run: |
+          DIGEST="$(docker buildx imagetools inspect "$BASE_IMAGE" --format '{{.Manifest.Digest}}')"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "safe=${DIGEST//:/_}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore last known base image digest
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/base-digest
+          key: base-digest-${{ steps.base-digest.outputs.safe }}
+          restore-keys: |
+            base-digest-
+
+      - name: Check if base image changed
+        id: check
+        run: |
+          if [ -f /tmp/base-digest/digest ] && [ "$(cat /tmp/base-digest/digest)" = "${{ steps.base-digest.outputs.digest }}" ]; then
+            echo "Base image unchanged, skipping build"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Base image changed"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push image
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Containerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:44
+
+      - name: Record base image digest
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
+        run: |
+          mkdir -p /tmp/base-digest
+          echo "${{ steps.base-digest.outputs.digest }}" > /tmp/base-digest/digest
+
+      - name: Save base image digest
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/base-digest
+          key: base-digest-${{ steps.base-digest.outputs.safe }}
