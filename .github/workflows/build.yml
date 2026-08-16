@@ -6,13 +6,12 @@ on:
       - main
       - master
   schedule:
-      - cron: '35 */1 * * *'
+      - cron: '17 */1 * * *'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  BASE_IMAGE: quay.io/fedora-ostree-desktops/kinoite:44
 
 jobs:
   build:
@@ -20,6 +19,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        version: [rawhide, 44, 45]
 
     steps:
       - name: Checkout repository
@@ -38,6 +40,8 @@ jobs:
 
       - name: Get current base image digest
         id: base-digest
+        env:
+          BASE_IMAGE: quay.io/fedora-ostree-desktops/kinoite:${{ matrix.version }}
         run: |
           DIGEST="$(docker buildx imagetools inspect "$BASE_IMAGE" --format '{{.Manifest.Digest}}')"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
@@ -48,9 +52,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: /tmp/base-digest
-          key: base-digest-${{ steps.base-digest.outputs.safe }}
+          key: base-digest-${{ matrix.version }}-${{ steps.base-digest.outputs.safe }}
           restore-keys: |
-            base-digest-
+            base-digest-${{ matrix.version }}-
 
       - name: Check if base image changed
         id: check
@@ -70,7 +74,9 @@ jobs:
           context: .
           file: ./Containerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:44
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.version }}
+          build-args: |
+            BASE_IMAGE=quay.io/fedora-ostree-desktops/kinoite:${{ matrix.version }}
 
       - name: Record base image digest
         if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
@@ -84,4 +90,4 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /tmp/base-digest
-          key: base-digest-${{ steps.base-digest.outputs.safe }}
+          key: base-digest-${{ matrix.version }}-${{ steps.base-digest.outputs.safe }}

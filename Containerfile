@@ -1,4 +1,5 @@
-FROM quay.io/fedora-ostree-desktops/kinoite:44
+ARG BASE_IMAGE=quay.io/fedora-ostree-desktops/kinoite:44
+FROM ${BASE_IMAGE}
 
 # COPY copr-egergo-mine.repo /etc/yum.repos.d/copr-egergo-mine.repo
 COPY vscode.repo /etc/yum.repos.d/vscode.repo
