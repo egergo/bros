@@ -14,6 +14,8 @@ RUN dnf install -y dnf-plugins-core \
         virt-manager \
         wireshark \
         zsh \
+        strace \
+        ncdu \
  && dnf install -y --setopt=tsflags=noscripts \
         akmods \
         kmodtool \
