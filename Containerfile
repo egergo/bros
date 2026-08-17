@@ -27,3 +27,5 @@ RUN dnf install -y dnf-plugins-core \
  && akmods --force --kernels "${KERNEL}" \
  && dnf remove -y kernel-devel-${KERNEL} gcc make \
  && dnf clean all
+
+RUN sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
