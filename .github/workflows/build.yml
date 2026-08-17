@@ -20,6 +20,7 @@ jobs:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix:
         version: [rawhide, 44, 45]
 
