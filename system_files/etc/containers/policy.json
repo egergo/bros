@@ -4,7 +4,7 @@
     "docker": {
       "ghcr.io/egergo": [
         {
-          "type": "sigstore",
+          "type": "cosign",
           "keyPath": "/etc/containers/cosign.pub"
         }
       ]
