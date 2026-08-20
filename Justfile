@@ -148,6 +148,19 @@ rechunk $target_image=image_name $tag=default_tag:
     trap 'rm -f "${CHUNKAH_CONFIG_FILE}"; rm -rf "${CHUNKAH_OUTPUT_DIR}"' EXIT
     podman inspect "${target_image}:${tag}" > "${CHUNKAH_CONFIG_FILE}"
 
+    # ArtifactHub reads metadata from OCI manifest annotations, not config
+    # labels, so repeat the relevant labels from `build` as annotations
+    ANNOTATIONS=(
+      "--annotation" "io.artifacthub.package.keywords={{ image_keywords }}"
+      "--annotation" "io.artifacthub.package.license=Apache-2.0"
+      "--annotation" "io.artifacthub.package.logo-url={{ image_logo_url }}"
+      "--annotation" "org.opencontainers.image.description={{ image_desc }}"
+    )
+    if [[ -z "$(git status -s)" ]]; then
+      GIT_SHA=$(git rev-parse --short HEAD)
+      ANNOTATIONS+=("--annotation" "io.artifacthub.package.readme-url=https://raw.githubusercontent.com/{{ repo_organization }}/{{ image_name }}/${GIT_SHA}/README.md")
+    fi
+
     podman run --rm \
       --mount=type=image,src="${target_image}:${tag}",target=/chunkah \
       -v "${CHUNKAH_CONFIG_FILE}:/chunkah-config.json:ro,Z" \
@@ -158,6 +171,7 @@ rechunk $target_image=image_name $tag=default_tag:
       --max-layers 128 \
       --prune /sysroot/ \
       --label ostree.commit- --label ostree.final-diffid- \
+      "${ANNOTATIONS[@]}" \
       --config /chunkah-config.json \
       --output oci:/run/out/chunked
 
