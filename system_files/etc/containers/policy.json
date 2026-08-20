@@ -1,0 +1,13 @@
+{
+  "default": [{"type": "insecureAcceptAnything"}],
+  "transports": {
+    "docker": {
+      "ghcr.io/egergo": [
+        {
+          "type": "sigstore",
+          "keyPath": "/etc/containers/cosign.pub"
+        }
+      ]
+    }
+  }
+}
