@@ -5,7 +5,7 @@
       "ghcr.io/egergo": [
         {
           "type": "sigstoreSigned",
-          "keyPath": "/etc/containers/cosign.pub",
+          "keyPath": "/etc/pki/containers/ghcr.io-egergo.pub",
           "signedIdentity": {"type": "matchRepository"}
         }
       ]
