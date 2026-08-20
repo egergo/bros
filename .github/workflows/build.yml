@@ -119,6 +119,7 @@ jobs:
 
       - name: Rechunk with Chunkah
         id: rechunk
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
         run: |
           just rechunk \
             ${IMAGE_NAME} \
