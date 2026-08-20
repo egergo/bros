@@ -1,7 +1,10 @@
 {
-  "default": [{"type": "insecureAcceptAnything"}],
+  "default": [{"type": "reject"}],
   "transports": {
     "docker": {
+      "quay.io/fedora-ostree-desktops": [
+        {"type": "insecureAcceptAnything"}
+      ],
       "ghcr.io/egergo": [
         {
           "type": "sigstoreSigned",
@@ -9,6 +12,9 @@
           "signedIdentity": {"type": "matchRepository"}
         }
       ]
+    },
+    "docker-daemon": {
+      "": [{"type": "insecureAcceptAnything"}]
     }
   }
 }
