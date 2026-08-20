@@ -7,21 +7,34 @@ cp -avf "/ctx/system_files"/. /
 
 ### Install packages
 
-# Packages can be installed from any enabled yum repo on the image.
-# RPMfusion repos are available by default in ublue main images
-# List of rpmfusion packages can be found here:
-# https://mirrors.rpmfusion.org/mirrorlist?path=free/fedora/updates/43/x86_64/repoview/index.html&protocol=https&redirect=1
+dnf install -y dnf-plugins-core
 
-# this installs a package from fedora repos
-dnf5 install -y tmux
+dnf copr enable -y egergo/mine
 
-# Use a COPR Example:
-#
-# dnf5 -y copr enable ublue-os/staging
-# dnf5 -y install package
-# Disable COPRs so they don't end up enabled on the final image:
-# dnf5 -y copr disable ublue-os/staging
+KERNEL="$(ls /usr/lib/modules)"
 
-#### Example for enabling a System Unit File
+dnf install -y --setopt=tsflags=nodocs \
+    code \
+    distrobox \
+    krb5-workstation \
+    kvantum \
+    virt-manager \
+    wireshark \
+    zsh \
+    strace \
+    ncdu
 
-systemctl enable podman.socket
+dnf install -y --setopt=tsflags=noscripts \
+    akmods \
+    kmodtool \
+    gcc \
+    make \
+    kernel-devel-${KERNEL} \
+    nct6687d
+
+akmods --force --kernels "${KERNEL}"
+
+dnf remove -y kernel-devel-${KERNEL} gcc make
+dnf clean all
+
+sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
