@@ -63,8 +63,7 @@ jobs:
       - name: Default Tag
         id: gen-default-tag
         run: |
-          DEFAULT_TAG=$(just generate-default-tag)
-          echo "DEFAULT_TAG=${DEFAULT_TAG}" >> $GITHUB_ENV
+          echo "DEFAULT_TAG=${{ matrix.version }}" >> $GITHUB_ENV
 
       - name: Prepare environment
         run: |
