@@ -1,31 +1,22 @@
+# Allow build scripts to be referenced without being copied into the final image
 ARG BASE_IMAGE=quay.io/fedora-ostree-desktops/kinoite:44
+
+FROM scratch AS ctx
+COPY build_files /
+COPY system_files /system_files
+
+# Base Image
 FROM ${BASE_IMAGE}
 
-# COPY copr-egergo-mine.repo /etc/yum.repos.d/copr-egergo-mine.repo
-COPY vscode.repo /etc/yum.repos.d/vscode.repo
+### [IM]MUTABLE /opt
+# RUN rm /opt && mkdir /opt
 
-RUN dnf install -y dnf-plugins-core \
- && dnf copr enable -y egergo/mine \
- && KERNEL="$(ls /usr/lib/modules)" \
- && dnf install -y --setopt=tsflags=nodocs \
-        code \
-        distrobox \
-        krb5-workstation \
-        kvantum \
-        virt-manager \
-        wireshark \
-        zsh \
-        strace \
-        ncdu \
- && dnf install -y --setopt=tsflags=noscripts \
-        akmods \
-        kmodtool \
-        gcc \
-        make \
-        kernel-devel-${KERNEL} \
-        nct6687d \
- && akmods --force --kernels "${KERNEL}" \
- && dnf remove -y kernel-devel-${KERNEL} gcc make \
- && dnf clean all
+### MODIFICATIONS
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,dst=/var/cache \
+    --mount=type=cache,dst=/var/log \
+    --mount=type=tmpfs,dst=/tmp \
+    /ctx/build.sh
 
-RUN sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
+### LINTING
+RUN bootc container lint
