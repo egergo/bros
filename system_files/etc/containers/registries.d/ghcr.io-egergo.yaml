@@ -1,0 +1,3 @@
+docker:
+  ghcr.io/egergo:
+    use-sigstore-attachments: true
