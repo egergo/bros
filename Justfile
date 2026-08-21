@@ -132,7 +132,11 @@ build $target_image=image_name $tag=default_tag:
     # This actually builds the image!
     PODMAN_BUILD_ARGS=("${BUILD_ARGS[@]}" --pull=newer --tag "${target_image}:${tag}" --file Containerfile)
 
-    podman build "${PODMAN_BUILD_ARGS[@]}" .
+    # /tmp/kmod-cache is bind-mounted so build.sh can reuse a previously
+    # built akmod rpm across CI runs (see build.sh)
+    podman build "${PODMAN_BUILD_ARGS[@]}" \
+        --volume /tmp/kmod-cache:/tmp/kmod-cache:Z \
+        .
 
 # Split the image for smaller updates (New)!
 rechunk $target_image=image_name $tag=default_tag:

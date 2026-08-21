@@ -24,17 +24,41 @@ dnf install -y --setopt=tsflags=nodocs \
     strace \
     ncdu
 
-dnf install -y --setopt=tsflags=noscripts \
-    akmods \
-    kmodtool \
-    gcc \
-    make \
-    kernel-devel-${KERNEL} \
-    nct6687d
+### Build or reuse the nct6687d akmod
+# akmods runs rpmbuild internally, stamping BUILDTIME=now on every run, which
+# churns the entire layer containing the module. Reuse a previously built rpm
+# (restored by CI cache) whenever it targets the running kernel so routine
+# builds produce byte-identical output.
+CACHE_DIR="${KMOD_CACHE_DIR:-/tmp/kmod-cache}"
+mkdir -p "${CACHE_DIR}"
+KMOD_RPM="${CACHE_DIR}/kmod-nct6687d-${KERNEL}.rpm"
 
-akmods --force --kernels "${KERNEL}"
+kmod_cached() {
+  [[ -s "${KMOD_RPM}" ]] || return 1
+  [[ "$(rpm -qp --qf '%{NAME}' "${KMOD_RPM}" 2>/dev/null)" == kmod-nct6687d* ]]
+}
 
-dnf remove -y kernel-devel-${KERNEL} gcc make
+if kmod_cached \
+  && dnf install -y --setopt=tsflags=noscripts "${KMOD_RPM}" \
+  && [[ -e "/usr/lib/modules/${KERNEL}/extra/nct6687d/nct6687.ko.xz" ]]; then
+  echo "Reusing cached akmod: ${KMOD_RPM}"
+else
+  dnf install -y --setopt=tsflags=noscripts \
+      akmods \
+      kmodtool \
+      gcc \
+      make \
+      kernel-devel-${KERNEL} \
+      nct6687d
+
+  akmods --force --kernels "${KERNEL}"
+
+  cp "$(find /var/cache/akmods -name 'kmod-nct6687d-*.rpm' | head -1)" "${KMOD_RPM}"
+fi
+
+if rpm -q kernel-devel-${KERNEL} &>/dev/null; then
+  dnf remove -y kernel-devel-${KERNEL} gcc make
+fi
 dnf clean all
 
 sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
