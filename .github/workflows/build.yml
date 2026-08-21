@@ -117,13 +117,13 @@ jobs:
       #       ${IMAGE_NAME} \
       #       ${DEFAULT_TAG}
 
-      # - name: Rechunk with Chunkah
-      #   id: rechunk
-      #   if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
-      #   run: |
-      #     just rechunk \
-      #       ${IMAGE_NAME} \
-      #       ${DEFAULT_TAG}
+      - name: Rechunk with Chunkah
+        id: rechunk
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
+        run: |
+          just rechunk \
+            ${IMAGE_NAME} \
+            ${DEFAULT_TAG}
 
       - name: Generate Build Tags
         id: gen-build-tags
@@ -156,7 +156,7 @@ jobs:
         run: |
           set -euox pipefail
           for tag in ${ALIAS_TAGS}; do
-            podman push --digestfile=/tmp/digestfile ${IMAGE_NAME}:${tag} ${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}
+            podman push --digestfile=/tmp/digestfile --compression-format=zstd:chunked ${IMAGE_NAME}:${tag} ${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}
           done
 
           digest=$(< /tmp/digestfile)
