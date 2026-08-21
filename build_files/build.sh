@@ -2,6 +2,9 @@
 
 set -ouex pipefail
 
+# Remember the pristine bookkeeping files before any dnf work touches them
+/ctx/churn.sh snapshot
+
 # Copy the contents of system_files/ of the git repo to /
 cp -avf "/ctx/system_files"/. /
 
@@ -38,3 +41,7 @@ dnf remove -y kernel-devel-${KERNEL} gcc make
 dnf clean all
 
 sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
+
+# Stage the churned bookkeeping files and rewind them to their pristine
+# state; the reveal step puts them back in a dedicated final layer
+/ctx/churn.sh stash

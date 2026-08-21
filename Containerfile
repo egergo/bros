@@ -13,10 +13,19 @@ FROM ${BASE_IMAGE}
 
 ### MODIFICATIONS
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,id=churn,dst=/churn \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
     /ctx/build.sh
+
+### VOLATILE FILE REVEAL
+# The build step rewinds the always-changing files (rpmdb, dnf history,
+# countme, the rebuilt nct6687d kmod) to their pristine state; this tiny
+# RUN puts them back so only this layer carries their churn
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,id=churn,dst=/churn \
+    /ctx/churn.sh reveal
 
 ### LINTING
 RUN bootc container lint
