@@ -19,6 +19,12 @@
 #                       they produce no diff for the main build layer
 #   churn.sh reveal   - place the staged copies back; run as its own tiny
 #                       RUN step so only this layer carries the churn
+#   churn.sh normalize- pin mtimes of everything this run wrote to the
+#                       epoch; scriptlets regenerate caches like the mime
+#                       database or depmod indexes with byte-identical
+#                       content every time, but their fresh timestamps
+#                       alone change the layer digest and make clients
+#                       re-download the whole layer
 #
 # $STASH_DIR is expected to be a --mount=type=cache destination, which is
 # never committed to any image layer. $CHURN_ROOT defaults to / and only
@@ -87,6 +93,15 @@ stash() {
     done < <(matches)
 }
 
+normalize() {
+    if [[ -z "${CHURN_SINCE:-}" ]]; then
+        echo "error: CHURN_SINCE must hold the build's start epoch" >&2
+        exit 1
+    fi
+    find "${ROOT}" -xdev -newermt "@$((CHURN_SINCE - 1))" -print0 |
+        xargs -0 -r touch -h -d @0 --
+}
+
 reveal() {
     if [[ ! -s "${STASH_DIR}/manifest" ]]; then
         echo "error: nothing staged under ${FINAL_DIR}; refusing to ship an image without its rpmdb" >&2
@@ -110,11 +125,11 @@ reveal() {
 }
 
 case "${1:-}" in
-snapshot | stash | reveal)
+snapshot | stash | reveal | normalize)
     "$1"
     ;;
 *)
-    echo "usage: $0 {snapshot|stash|reveal}" >&2
+    echo "usage: $0 {snapshot|stash|reveal|normalize}" >&2
     exit 2
     ;;
 esac
