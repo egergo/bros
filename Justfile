@@ -166,6 +166,12 @@ rechunk $target_image=image_name $tag=default_tag:
       ANNOTATIONS+=("--annotation" "io.artifacthub.package.readme-url=https://raw.githubusercontent.com/{{ repo_organization }}/{{ image_name }}/${GIT_SHA}/README.md")
     fi
 
+    # Clamp mtimes to a fixed epoch so unchanged content yields identical
+    # layers across builds. A constant beats a per-commit timestamp here:
+    # scriptlet-touched files (rpmdb, mime db, selinux modules, ...) are
+    # rewritten every build and would otherwise clamp to a new value each
+    # time. Without this, chunkah falls back to the image's Created
+    # timestamp, which differs on every run.
     podman run --rm \
       --mount=type=image,src="${target_image}:${tag}",target=/chunkah \
       -v "${CHUNKAH_CONFIG_FILE}:/chunkah-config.json:ro,Z" \
@@ -175,6 +181,7 @@ rechunk $target_image=image_name $tag=default_tag:
       --verbose \
       --max-layers 128 \
       --prune /sysroot/ \
+      --source-date-epoch 946684800 \
       --label ostree.commit- --label ostree.final-diffid- \
       "${ANNOTATIONS[@]}" \
       --config /chunkah-config.json \
