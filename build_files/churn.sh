@@ -98,7 +98,14 @@ normalize() {
         echo "error: CHURN_SINCE must hold the build's start epoch" >&2
         exit 1
     fi
-    find "${ROOT}" -xdev -newermt "@$((CHURN_SINCE - 1))" -print0 |
+    # -xdev keeps us from descending into mounted filesystems, but the
+    # mountpoints themselves are still visited and /proc reports a
+    # current mtime, so skip them explicitly rather than trying to
+    # utimensat them and dying with EPERM
+    local r="${ROOT%/}"
+    find "${ROOT}" -xdev \
+        \( -path "$r/proc" -o -path "$r/sys" -o -path "$r/dev" \) -prune -o \
+        -newermt "@$((CHURN_SINCE - 1))" -print0 |
         xargs -0 -r touch -h -d @0 --
 }
 
