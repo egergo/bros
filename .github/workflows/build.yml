@@ -81,7 +81,7 @@ jobs:
 
       - name: Restore last known base image digest
         id: cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: /tmp/base-digest
           key: base-digest-${{ matrix.version }}-${{ steps.base-digest.outputs.safe }}
@@ -185,7 +185,7 @@ jobs:
       - name: Save base image digest
         if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: /tmp/base-digest
           key: base-digest-${{ matrix.version }}-${{ steps.base-digest.outputs.safe }}
