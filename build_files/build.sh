@@ -43,13 +43,23 @@ if kmod_cached \
   && [[ -e "/usr/lib/modules/${KERNEL}/extra/nct6687d/nct6687.ko.xz" ]]; then
   echo "Reusing cached akmod: ${KMOD_RPM}"
 else
+  # The updates repo drops kernel-devel as soon as a newer kernel
+  # supersedes it while the base image still ships the old one; fetch the
+  # exact match straight from Koji instead of the repo
+  KD_ARCH="${KERNEL##*.}"           # x86_64
+  KD_REL="${KERNEL#*-}"             # 200.fc44.x86_64
+  KD_REL="${KD_REL%."${KD_ARCH}"}"  # 200.fc44
+  KD_VER="${KERNEL%%-*}"            # 7.1.8
+
   dnf install -y --setopt=tsflags=noscripts \
       akmods \
       kmodtool \
       gcc \
       make \
-      kernel-devel-${KERNEL} \
       nct6687d
+
+  dnf install -y --setopt=tsflags=noscripts \
+      "https://kojipkgs.fedoraproject.org/packages/kernel/${KD_VER}/${KD_REL}/${KD_ARCH}/kernel-devel-${KERNEL}.rpm"
 
   akmods --force --kernels "${KERNEL}"
 
