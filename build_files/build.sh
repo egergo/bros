@@ -22,14 +22,19 @@ dnf install -y --setopt=tsflags=nodocs \
     strace \
     ncdu
 
+# akmods hard-requires kernel-devel-matched. Pre-install the one matching
+# the kernel shipped by the base image (updates-archive keeps superseded
+# builds), so dnf never upgrades the kernel to satisfy it.
+KERNEL="$(ls -1 /usr/lib/modules | sort -V | tail -1)"
+dnf install -y --setopt=tsflags=noscripts \
+    "kernel-devel-matched-${KERNEL%.*}.${KERNEL##*.}"
+
 dnf install -y --setopt=tsflags=noscripts \
     akmods \
     kmodtool \
     gcc \
     make \
     nct6687d
-
-KERNEL="$(ls /usr/lib/modules)"
 
 akmods --force --kernels "${KERNEL}"
 
