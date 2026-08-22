@@ -99,15 +99,28 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve akmod cache key
+        id: kmod-key
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
+        env:
+          BASE_IMAGE: quay.io/fedora-ostree-desktops/kinoite:${{ matrix.version }}
+        run: |
+          podman pull "$BASE_IMAGE"
+          kernel="$(podman run --rm "$BASE_IMAGE" bash -c 'ls -1 /usr/lib/modules | head -1')"
+          nct="$(curl -s 'https://copr.fedorainfracloud.org/api_3/build/list?ownername=egergo&projectname=mine&packagename=nct6687d-kmod' | jq -r '.items[0].version')"
+          echo "kernel=${kernel}" >> "$GITHUB_OUTPUT"
+          echo "nct=${nct}" >> "$GITHUB_OUTPUT"
+
       - name: Cache akmod
         uses: actions/cache@v4
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true')
         with:
           path: /tmp/kmod-cache
-          # run_id makes the key unique so the (possibly rebuilt) rpm is
-          # always saved; build.sh decides whether a restored rpm is usable
-          key: kmod-nct6687d-${{ github.run_id }}
-          restore-keys: |
-            kmod-nct6687d-
+          # Exact key: identical kernel + module source yields an exact hit
+          # (no duplicate saves); a change to either misses once, rebuilds,
+          # and saves under the new key. build.sh double-checks the restored
+          # rpm against the actual kernel as a safety net.
+          key: kmod-nct6687d-${{ steps.kmod-key.outputs.kernel }}-${{ steps.kmod-key.outputs.nct }}
 
       - name: Build Image
         id: build-image
