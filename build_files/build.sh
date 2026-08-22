@@ -22,9 +22,6 @@ dnf install -y --setopt=tsflags=nodocs \
     strace \
     ncdu
 
-# akmods hard-requires kernel-devel-matched, which pulls the latest kernel
-# pair from the updates repo. Let it happen and build for whatever kernel
-# we end up shipping.
 dnf install -y --setopt=tsflags=noscripts \
     akmods \
     kmodtool \
@@ -32,15 +29,7 @@ dnf install -y --setopt=tsflags=noscripts \
     make \
     nct6687d
 
-KERNEL="$(ls -1 /usr/lib/modules | sort -V | tail -1)"
-
-# The upgrade leaves the previous kernel behind; purge it so the image ships
-# exactly one kernel (the one we build the module for)
-KVR="${KERNEL%.*}"
-OLD_KERNEL_PKGS="$(rpm -qa kernel kernel-core kernel-modules kernel-modules-extra kernel-modules-core kernel-devel --qf '%{NAME}-%{EVR}.%{ARCH}\n' | grep -v -- "-${KVR}." | sort -u || true)"
-if [[ -n "${OLD_KERNEL_PKGS}" ]]; then
-  dnf remove -y ${OLD_KERNEL_PKGS}
-fi
+KERNEL="$(ls /usr/lib/modules)"
 
 akmods --force --kernels "${KERNEL}"
 
