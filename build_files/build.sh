@@ -24,7 +24,7 @@ dnf install -y --setopt=tsflags=nodocs \
 
 # akmods hard-requires kernel-devel-matched, which pulls the latest kernel
 # pair from the updates repo. Let it happen and build for whatever kernel
-# we end up shipping, then make sure devel matches that exact version.
+# we end up shipping.
 dnf install -y --setopt=tsflags=noscripts \
     akmods \
     kmodtool \
@@ -34,22 +34,9 @@ dnf install -y --setopt=tsflags=noscripts \
 
 KERNEL="$(ls /usr/lib/modules)"
 
-if ! rpm -q kernel-devel-${KERNEL} &>/dev/null; then
-  KD_ARCH="${KERNEL##*.}"           # x86_64
-  KD_REL="${KERNEL#*-}"             # 200.fc44.x86_64
-  KD_REL="${KD_REL%."${KD_ARCH}"}"  # 200.fc44
-  KD_VER="${KERNEL%%-*}"
-
-  dnf install -y --setopt=tsflags=noscripts "kernel-devel-${KERNEL}" || \
-    dnf install -y --setopt=tsflags=noscripts \
-      "https://kojipkgs.fedoraproject.org/packages/kernel/${KD_VER}/${KD_REL}/${KD_ARCH}/kernel-devel-${KERNEL}.rpm"
-fi
-
 akmods --force --kernels "${KERNEL}"
 
-if rpm -q kernel-devel-${KERNEL} &>/dev/null; then
-  dnf remove -y kernel-devel-${KERNEL} gcc make
-fi
+dnf remove -y kernel-devel-${KERNEL} gcc make
 dnf clean all
 
 sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
