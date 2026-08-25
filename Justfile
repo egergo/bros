@@ -179,7 +179,7 @@ rechunk $target_image=image_name $tag=default_tag:
       quay.io/coreos/chunkah:latest \
       build \
       --verbose \
-      --max-layers 384 \
+      --max-layers 256 \
       --prune /sysroot/ \
       --source-date-epoch 946684800 \
       --label ostree.commit- --label ostree.final-diffid- \
