@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [44]
+        version: [44, 45]
 
     steps:
       - name: Checkout
