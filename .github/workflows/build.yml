@@ -153,10 +153,11 @@ jobs:
         id: push-image
         env:
           ALIAS_TAGS: ${{ steps.gen-build-tags.outputs.alias_tags }}
+        # Do not use --compression-format=zstd:chunked because that changes the digest
         run: |
           set -euox pipefail
           for tag in ${ALIAS_TAGS}; do
-            podman push --digestfile=/tmp/digestfile --compression-format=zstd:chunked ${IMAGE_NAME}:${tag} ${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}
+            podman push --digestfile=/tmp/digestfile ${IMAGE_NAME}:${tag} ${IMAGE_REGISTRY}/${IMAGE_NAME}:${tag}
           done
 
           digest=$(< /tmp/digestfile)
