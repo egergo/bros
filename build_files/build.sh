@@ -22,6 +22,16 @@ dnf install -y --setopt=tsflags=nodocs \
     strace \
     ncdu
 
+### Remove packages we don't want from the base image
+
+# The base image ships the RPM Firefox (and its langpacks); we use the
+# Flatpak instead. Guarded so the build doesn't break if a future base
+# image stops shipping it.
+FIREFOX_PKGS="$(rpm -qa 'firefox*' --qf '%{NAME}\n' | sort -u || true)"
+if [[ -n "${FIREFOX_PKGS}" ]]; then
+  dnf remove -y ${FIREFOX_PKGS}
+fi
+
 # akmods hard-requires kernel-devel-matched, which pulls the latest kernel
 # pair from the updates repo. Let it happen and build for whatever kernel
 # we end up shipping.
