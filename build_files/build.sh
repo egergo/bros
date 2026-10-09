@@ -14,6 +14,7 @@ dnf copr enable -y egergo/mine
 dnf install -y --setopt=tsflags=nodocs \
     code \
     distrobox \
+    docker-compose \
     krb5-workstation \
     kvantum \
     virt-manager \
