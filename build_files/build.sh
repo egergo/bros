@@ -23,6 +23,20 @@ dnf install -y --setopt=tsflags=nodocs \
     strace \
     ncdu
 
+### Fedora 45: OpenSSL 3 compat library for VS Code extension installs
+
+# Fedora 45 moved the system OpenSSL to 4.x; libssl.so.3 moved to the
+# separate openssl3-libs compat package, which nothing pulls in.
+# VS Code verifies marketplace extensions with its bundled .NET helper
+# vsce-sign, which only probes for libssl.so.3 (or older) and aborts
+# without it, so every extension install fails with a signature
+# verification UnknownError while the editor itself works fine.
+# Guarded by Fedora version: on 44 libssl.so.3 is the system library
+# (openssl-libs) and openssl3-libs does not exist.
+if [[ "$(rpm -E %fedora)" -ge 45 ]]; then
+  dnf install -y openssl3-libs
+fi
+
 ### Remove packages we don't want from the base image
 
 # The base image ships the RPM Firefox (and its langpacks); we use the
