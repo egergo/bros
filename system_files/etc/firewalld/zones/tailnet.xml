@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<zone target="DROP">
+  <short>Tailnet</short>
+  <description>Tailscale tailnet traffic. Closed by default: all inbound traffic on tailscale0, and all inbound traffic from the Tailscale address ranges (100.64.0.0/10 and fd7a:115c:a1e0::/48, which every tailnet uses), is dropped unless a service, port or rich rule is explicitly added to this zone. Nothing is allowed by this file as shipped, not even ssh. Outbound traffic and replies to established connections are unaffected.</description>
+  <interface name="tailscale0"/>
+  <source address="100.64.0.0/10"/>
+  <source address="fd7a:115c:a1e0::/48"/>
+</zone>
