@@ -21,7 +21,26 @@ dnf install -y --setopt=tsflags=nodocs \
     wireshark \
     zsh \
     strace \
-    ncdu
+    ncdu \
+    tailscale
+
+### Tailscale
+
+# tailscale comes from Tailscale's own Fedora repo, not the Fedora
+# repos. The repo definition is vendored in
+# system_files/etc/yum.repos.d/tailscale.repo (verbatim from
+# https://pkgs.tailscale.com/stable/fedora/tailscale.repo, same
+# pattern as vscode.repo) and was copied to / at the top of this
+# script, before the dnf install above. Its baseurl is
+# Fedora-version-agnostic ($basearch only, no $releasever), so the
+# same repo works on both the 44 and 45 build legs.
+# The vendored file is used instead of dnf config-manager
+# --add-repo: that is dnf4 syntax and is an unknown argument on
+# the dnf5 shipped by Fedora 44/45.
+# Enable the daemon so it starts at boot; joining a tailnet is a
+# per-machine step and is deliberately not done in the image --
+# run `sudo tailscale up` on the installed system.
+systemctl enable tailscaled
 
 ### Fedora 45: OpenSSL 3 compat library for VS Code extension installs
 
