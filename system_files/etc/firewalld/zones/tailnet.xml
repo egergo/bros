@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<zone target="DROP">
+  <short>Tailnet</short>
+  <description>Tailscale tailnet traffic, caught by interface: everything inbound on tailscale0, the interface tailscaled always creates whichever tailnet the machine joins, is dropped unless a service, port or rich rule is explicitly added to this zone. Nothing is allowed by this file as shipped, not even ssh. Outbound traffic and replies to established connections are unaffected.</description>
+  <interface name="tailscale0"/>
+</zone>
