@@ -37,10 +37,10 @@ dnf install -y --setopt=tsflags=nodocs \
 # The vendored file is used instead of dnf config-manager
 # --add-repo: that is dnf4 syntax and is an unknown argument on
 # the dnf5 shipped by Fedora 44/45.
-# Enable the daemon so it starts at boot; joining a tailnet is a
-# per-machine step and is deliberately not done in the image --
-# run `sudo tailscale up` on the installed system.
-systemctl enable tailscaled
+# The daemon is deliberately NOT enabled in the image: enabling
+# it and joining a tailnet are per-machine steps, done on the
+# installed system (`systemctl enable --now tailscaled`, then
+# `sudo tailscale up`).
 
 ### Fedora 45: OpenSSL 3 compat library for VS Code extension installs
 
