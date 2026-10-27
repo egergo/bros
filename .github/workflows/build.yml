@@ -11,9 +11,6 @@ on:
     - cron: '17 */8 * * *'
   workflow_dispatch:
 
-env:
-  IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
@@ -37,14 +34,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Resolve image registry
+        id: registry
+        run: |
+          # This workflow runs both on GitHub and on a local Gitea instance.
+          # github.server_url is https://github.com on GitHub; on Gitea the
+          # github context is mirrored, so it is the instance URL there.
+          if [ "${{ github.server_url }}" = "https://github.com" ]; then
+            host="ghcr.io"
+          else
+            host="${{ github.server_url }}"
+            host="${host#http://}"
+            host="${host#https://}"
+            host="${host%%/*}"
+          fi
+          echo "host=${host}" >> "$GITHUB_OUTPUT"
+          echo "image_registry=${host}/${{ github.repository_owner }}" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
         # Only needed for pushing; PR builds never push, and fork PRs have no secrets
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.server_url == 'https://github.com'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to local container registry
+        # Same gate as the GHCR login, but for runs on the local Gitea
+        # instance, whose built-in job token is GITEA_TOKEN.
+        if: github.event_name != 'pull_request' && github.server_url != 'https://github.com'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ steps.registry.outputs.host }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITEA_TOKEN }}
 
       # - name: Maximize build space
       #   uses: ublue-os/remove-unwanted-software@v7
@@ -70,6 +94,7 @@ jobs:
 
       - name: Prepare environment
         run: |
+          IMAGE_REGISTRY="${{ steps.registry.outputs.image_registry }}"
           echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
           echo "IMAGE_NAME=${IMAGE_NAME,,}" >> ${GITHUB_ENV}
 
@@ -151,7 +176,7 @@ jobs:
             "${DEFAULT_TAG}" \
             "${ALIAS_TAGS}"
 
-      - name: Push To GHCR
+      - name: Push image to registry
         if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true') && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         id: push-image
         env:
