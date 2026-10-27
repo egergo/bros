@@ -74,7 +74,12 @@ jobs:
       #   uses: ublue-os/remove-unwanted-software@v7
 
       - name: Install just
-        uses: extractions/setup-just@v4
+        run: |
+          set -euo pipefail
+          tag="$(curl -fsSIL -o /dev/null -w '%{url_effective}' https://github.com/casey/just/releases/latest | sed 's|.*/||')"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${tag}/just-${tag}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Check Just Syntax
         shell: bash
