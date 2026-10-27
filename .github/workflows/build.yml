@@ -68,7 +68,7 @@ jobs:
         with:
           registry: ${{ steps.registry.outputs.host }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITEA_TOKEN }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
 
       # - name: Maximize build space
       #   uses: ublue-os/remove-unwanted-software@v7
