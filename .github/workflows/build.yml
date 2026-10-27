@@ -81,6 +81,25 @@ jobs:
           curl -fsSL "https://github.com/casey/just/releases/download/${tag}/just-${tag}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Install podman (Gitea only)
+        # GitHub's runners preinstall podman; Gitea's default runner image
+        # (ubuntu-latest) does not ship it — it has the Docker CLI, git and
+        # jq, but no podman. The -full image ships podman but is ~75 GB on
+        # disk, so on Gitea we install just what's needed instead. The
+        # explicit packages after podman are its rootless helpers on
+        # Ubuntu 24.04 (fuse-overlayfs for storage, uidmap's
+        # newuidmap/newgidmap for user namespaces, slirp4netns for
+        # rootless networking); apt also pulls podman's own dependencies
+        # (crun/conmon/netavark) automatically.
+        if: github.server_url != 'https://github.com'
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          if [ "$(id -u)" -ne 0 ]; then SUDO=sudo; else SUDO=""; fi
+          $SUDO apt-get update
+          $SUDO apt-get install -y podman fuse-overlayfs uidmap slirp4netns
+          podman --version
+
       - name: Check Just Syntax
         shell: bash
         run: |
