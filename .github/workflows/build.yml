@@ -11,9 +11,6 @@ on:
     - cron: '17 */8 * * *'
   workflow_dispatch:
 
-env:
-  IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
@@ -37,20 +34,72 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Resolve image registry
+        id: registry
+        run: |
+          # This workflow runs both on GitHub and on a local Gitea instance.
+          # github.server_url is https://github.com on GitHub; on Gitea the
+          # github context is mirrored, so it is the instance URL there.
+          if [ "${{ github.server_url }}" = "https://github.com" ]; then
+            host="ghcr.io"
+          else
+            host="${{ github.server_url }}"
+            host="${host#http://}"
+            host="${host#https://}"
+            host="${host%%/*}"
+          fi
+          echo "host=${host}" >> "$GITHUB_OUTPUT"
+          echo "image_registry=${host}/${{ github.repository_owner }}" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
         # Only needed for pushing; PR builds never push, and fork PRs have no secrets
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.server_url == 'https://github.com'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to local container registry
+        # Same gate as the GHCR login, but for runs on the local Gitea
+        # instance. Uses a PAT (REGISTRY_TOKEN): Gitea's built-in job
+        # token has no package scope and cannot log in to the registry.
+        if: github.event_name != 'pull_request' && github.server_url != 'https://github.com'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ steps.registry.outputs.host }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
       # - name: Maximize build space
       #   uses: ublue-os/remove-unwanted-software@v7
 
       - name: Install just
-        uses: extractions/setup-just@v4
+        run: |
+          set -euo pipefail
+          tag="$(curl -fsSIL -o /dev/null -w '%{url_effective}' https://github.com/casey/just/releases/latest | sed 's|.*/||')"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${tag}/just-${tag}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install podman (Gitea only)
+        # GitHub's runners preinstall podman; Gitea's default runner image
+        # (ubuntu-latest) does not ship it — it has the Docker CLI, git and
+        # jq, but no podman. The -full image ships podman but is ~75 GB on
+        # disk, so on Gitea we install just what's needed instead. The
+        # explicit packages after podman are its rootless helpers on
+        # Ubuntu 24.04 (fuse-overlayfs for storage, uidmap's
+        # newuidmap/newgidmap for user namespaces, slirp4netns for
+        # rootless networking); apt also pulls podman's own dependencies
+        # (crun/conmon/netavark) automatically.
+        if: github.server_url != 'https://github.com'
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          if [ "$(id -u)" -ne 0 ]; then SUDO=sudo; else SUDO=""; fi
+          $SUDO apt-get update
+          $SUDO apt-get install -y podman fuse-overlayfs uidmap slirp4netns
+          podman --version
 
       - name: Check Just Syntax
         shell: bash
@@ -70,6 +119,7 @@ jobs:
 
       - name: Prepare environment
         run: |
+          IMAGE_REGISTRY="${{ steps.registry.outputs.image_registry }}"
           echo "IMAGE_REGISTRY=${IMAGE_REGISTRY,,}" >> ${GITHUB_ENV}
           echo "IMAGE_NAME=${IMAGE_NAME,,}" >> ${GITHUB_ENV}
 
@@ -151,7 +201,7 @@ jobs:
             "${DEFAULT_TAG}" \
             "${ALIAS_TAGS}"
 
-      - name: Push To GHCR
+      - name: Push image to registry
         if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true') && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         id: push-image
         env:
