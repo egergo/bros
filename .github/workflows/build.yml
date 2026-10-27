@@ -98,6 +98,17 @@ jobs:
           if [ "$(id -u)" -ne 0 ]; then SUDO=sudo; else SUDO=""; fi
           $SUDO apt-get update
           $SUDO apt-get install -y podman fuse-overlayfs uidmap slirp4netns
+          # Nested rootless: on a rootless runner the job's uid 0 lives in
+          # the daemon's user namespace, so podman treats itself as
+          # rootless and builds its namespace map from /etc/subuid — where
+          # the job image has no entry for root, leaving a single-ID
+          # namespace that cannot chown image files (first failure:
+          # gid 7 on /etc/cups in the Fedora base image). Delegate the
+          # rest of the parent namespace's range (IDs are parent-namespace
+          # IDs: own 0 plus 1..65535 = the full 65536 a rootless daemon
+          # has). No-op on a rootful runner, where podman ignores these.
+          grep -q '^root:' /etc/subuid || echo 'root:1:65535' >> /etc/subuid
+          grep -q '^root:' /etc/subgid || echo 'root:1:65535' >> /etc/subgid
           podman --version
 
       - name: Check Just Syntax
