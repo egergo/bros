@@ -24,6 +24,7 @@ dnf install -y --setopt=tsflags=nodocs \
     ncdu \
     rsms-inter-fonts \
     tailscale \
+    fuse \
     fuse-libs
 
 ### Tailscale
@@ -59,20 +60,31 @@ dnf install -y --setopt=tsflags=nodocs \
 # are unchanged, and which font the UI uses remains a per-user
 # setting. This only makes the family available system-wide.
 
-### AppImage support (FUSE 2 library)
+### AppImage support (FUSE 2)
 
-# Older type-2 AppImages dlopen libfuse.so.2 to mount themselves
-# and fail immediately without it:
-#   dlopen(): error loading libfuse.so.2
-#   AppImages require FUSE to run.
+# Older type-2 AppImages need FUSE 2 in two pieces, and fail at
+# a different step for each missing piece:
+#   - fuse-libs: the library the AppImage runtime dlopens to
+#     mount itself. Missing on moshke 2026-10-30 (PR #18):
+#       dlopen(): error loading libfuse.so.2
+#       AppImages require FUSE to run.
+#   - fuse: the userspace tools, above all /usr/bin/fusermount,
+#     which the library execs to perform the mount. With only
+#     the library installed, moshke after the PR #18 deployment
+#     and a reboot got one step further and failed with:
+#       fuse: failed to exec fusermount: No such file or directory
+#       Cannot mount AppImage, please check your FUSE setup.
+#     (WowUp-CF-2.24.1.AppImage, 2026-10-30.)
 # Fedora Atomic Desktops dropped the FUSE 2 packages from the
 # base image in Fedora 44, and the FUSE 3 library that remains
-# is a different, incompatible soname. fuse-libs is Fedora's
-# FUSE v2 library package (2.9.9-25.fc44, 2.9.9-26.fc45,
-# verified on packages.fedoraproject.org) and is in the main
-# dnf install list above.
+# is a different, incompatible soname. Both packages are
+# Fedora's FUSE v2 packages at the same versions
+# (2.9.9-25.fc44, 2.9.9-26.fc45, verified on
+# packages.fedoraproject.org; the fusermount file list was
+# verified in the actual fuse RPM payloads from Koji, and
+# fuse-libs' payload contains no fusermount). Both are in the
+# main dnf install list above.
 # Install only: no service, no default, and no change to FUSE 3.
-# Seen on moshke 2026-10-30 running WowUp-2.24.1.AppImage.
 
 ### Fedora 45: OpenSSL 3 compat library for VS Code extension installs
 
