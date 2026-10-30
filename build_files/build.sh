@@ -22,6 +22,7 @@ dnf install -y --setopt=tsflags=nodocs \
     zsh \
     strace \
     ncdu \
+    rsms-inter-fonts \
     tailscale
 
 ### Tailscale
@@ -41,6 +42,21 @@ dnf install -y --setopt=tsflags=nodocs \
 # it and joining a tailnet are per-machine steps, done on the
 # installed system (`systemctl enable --now tailscaled`, then
 # `sudo tailscale up`).
+
+### Inter font
+
+# rsms-inter-fonts is Fedora's package of the Inter UI font. It was
+# previously installed only per-user on moshke, in
+# ~/.local/share/fonts/inter (Version 3.015), while the KDE and GTK
+# configuration already names Inter as the UI font -- so a fresh
+# install without that per-user copy would silently fall back.
+# The Fedora package is 4.1 on both build legs (4.1-3.fc44 and
+# 4.1-4.fc45), the non-variable static OTFs, installed to
+# /usr/share/fonts/rsms-inter-fonts/. Installing it here is a
+# deliberate version jump from the local 3.015 copy.
+# No default is set in the image: fontconfig and desktop defaults
+# are unchanged, and which font the UI uses remains a per-user
+# setting. This only makes the family available system-wide.
 
 ### Fedora 45: OpenSSL 3 compat library for VS Code extension installs
 
