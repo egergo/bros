@@ -1,0 +1,24 @@
+# BrOS kernel arguments, burned into the image via bootc kargs.d.
+#
+# These are exactly the non-default arguments moshke was verified
+# booting with on Oct 30, 2026, where they existed only as local
+# rpm-ostree state carried across deployments. Burning them in
+# makes every BrOS machine get them from the image instead.
+#
+# - split_lock_detect=off: turn off split-lock detection/breaking.
+# - preempt=full: run the kernel fully preemptible.
+# - rootflags=compress=zstd:1: an ADDITIONAL rootflags entry (the
+#   install-time rootflags=subvol=<root subvolume> stays), so the
+#   btrfs root is mounted with zstd:1 compression. Only correct
+#   for machines whose root is btrfs, like moshke.
+#
+# Verbose boot is deliberately NOT expressed here, because it
+# cannot be: kargs.d can only ADD arguments, and the graphical
+# boot on a stock install is just the presence of the install-time
+# "rhgb quiet" pair -- there is no image file adding them to
+# remove. A machine that has them needs a one-time local removal
+# (rpm-ostree kargs --delete-if-present=rhgb
+#  --delete-if-present=quiet); a machine without them, like
+# moshke, stays verbose, as image kargs preserve machine-local
+# arguments.
+kargs = ["split_lock_detect=off", "preempt=full", "rootflags=compress=zstd:1"]
