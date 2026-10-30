@@ -23,7 +23,8 @@ dnf install -y --setopt=tsflags=nodocs \
     strace \
     ncdu \
     rsms-inter-fonts \
-    tailscale
+    tailscale \
+    fuse-libs
 
 ### Tailscale
 
@@ -57,6 +58,21 @@ dnf install -y --setopt=tsflags=nodocs \
 # No default is set in the image: fontconfig and desktop defaults
 # are unchanged, and which font the UI uses remains a per-user
 # setting. This only makes the family available system-wide.
+
+### AppImage support (FUSE 2 library)
+
+# Older type-2 AppImages dlopen libfuse.so.2 to mount themselves
+# and fail immediately without it:
+#   dlopen(): error loading libfuse.so.2
+#   AppImages require FUSE to run.
+# Fedora Atomic Desktops dropped the FUSE 2 packages from the
+# base image in Fedora 44, and the FUSE 3 library that remains
+# is a different, incompatible soname. fuse-libs is Fedora's
+# FUSE v2 library package (2.9.9-25.fc44, 2.9.9-26.fc45,
+# verified on packages.fedoraproject.org) and is in the main
+# dnf install list above.
+# Install only: no service, no default, and no change to FUSE 3.
+# Seen on moshke 2026-10-30 running WowUp-2.24.1.AppImage.
 
 ### Fedora 45: OpenSSL 3 compat library for VS Code extension installs
 
