@@ -157,31 +157,6 @@ rm -fv /usr/lib/modules-load.d/nct6687.conf
 
 sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
 
-### Regenerate the initramfs
-
-# Nothing else in this build guarantees a fresh initramfs: there is
-# no dracut step in the Containerfile or the workflow, so generation
-# only ever happened as a side effect of installing a different
-# kernel than the base image's -- and when the updates kernel and
-# the base kernel coincide, the base image's pre-generated initramfs
-# is carried through untouched, with the base image's configuration.
-# That silently defeated image-level early-boot configuration (the
-# plymouth theme of PR #20: the deployed initramfs still selected
-# the base default, bgrt, verified with lsinitrd on werewolf
-# 2026-11-01). Regenerate explicitly, for the one kernel the image
-# ships (${KERNEL}, determined and purged down to a single kernel
-# in the akmods block above), after every other change to the image
-# contents has landed. This follows the documented bootc recipe
-# (Red Hat image-mode documentation, "Managing RHEL bootc images":
-#   dracut -vf /usr/lib/modules/<kernel-version>/initramfs.img <kernel-version>
-# with the target kernel version passed explicitly). The script's
-# set -e makes a dracut failure fail the build rather than ship a
-# stale initramfs. The kernel itself stays the Fedora-signed one;
-# in the shim/GRUB boot flow the initramfs is not a signed object
-# (only a UKI bundles it under a signature), so regenerating it has
-# no Secure Boot interaction.
-dracut -vf "/usr/lib/modules/${KERNEL}/initramfs.img" "${KERNEL}"
-
 ### Remove build-state files that would otherwise differ on every build
 # and invalidate the layers containing them
 rm -fv /var/lib/dnf/repos/*/countme
