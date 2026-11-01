@@ -157,6 +157,40 @@ rm -fv /usr/lib/modules-load.d/nct6687.conf
 
 sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
 
+### Regenerate the initramfs
+
+# Nothing else in this build guarantees a fresh initramfs: there is
+# no dracut step in the Containerfile or the workflow, so generation
+# otherwise happens only as a side effect of installing a different
+# kernel than the base image's -- and when the updates kernel and
+# the base kernel coincide, the base image's pre-generated initramfs
+# is carried through untouched, with the base image's configuration.
+# That silently defeated image-level early-boot configuration (the
+# plymouth theme of PR #20: the deployed initramfs still selected
+# the base default, bgrt, verified with lsinitrd on werewolf
+# 2026-11-01). Regenerate explicitly, for the one kernel the image
+# ships (${KERNEL}, determined and purged down to a single kernel
+# in the akmods block above), after every other change to the image
+# contents has landed. set -e makes a dracut failure fail the build.
+#
+# The arguments mirror the ones recorded in Fedora's own working
+# initramfs (read with lsinitrd): --reproducible --no-hostonly
+# --add 'ostree'. The --add is load-bearing, not decoration: the
+# ostree dracut module is opt-in -- the check() in
+# /usr/lib/dracut/modules.d/50ostree/module-setup.sh returns 255
+# ("never include by default") when systemd and
+# /usr/lib/ostree/ostree-prepare-root are present, so a bare
+# "dracut -vf" (the recipe PR #22 shipped, following the Red Hat
+# image-mode documentation) produces an initramfs with no
+# ostree-prepare-root, which cannot assemble the deployment root
+# and drops to the emergency console -- exactly what the
+# 45.20261101-56f8eb6 image did on werewolf; PR #22 was reverted
+# by PR #23. The kernel itself stays the Fedora-signed one; in the
+# shim/GRUB boot flow the initramfs is not a signed object (only a
+# UKI bundles it under a signature), so regenerating it has no
+# Secure Boot interaction.
+dracut --reproducible --no-hostonly --add 'ostree' -vf "/usr/lib/modules/${KERNEL}/initramfs.img" "${KERNEL}"
+
 ### Remove build-state files that would otherwise differ on every build
 # and invalidate the layers containing them
 rm -fv /var/lib/dnf/repos/*/countme
