@@ -135,6 +135,26 @@ akmods --force --kernels "${KERNEL}"
 dnf remove -y kernel-devel-${KERNEL} gcc make
 dnf clean all
 
+### nct6687d: keep the module, drop the fleet-wide autoload
+
+# The nct6687d package (installed with the akmods block above) ships
+# /usr/lib/modules-load.d/nct6687.conf, which makes every BrOS machine
+# load the module at boot, in the initramfs and again on the real
+# system (ownership verified with rpm -qf on a deployed Fedora 45
+# image: nct6687d-1.0.248). Only moshke has the NCT6687 Super I/O chip
+# (its MSI desktop board); the module is a hwmon sensor driver with no
+# early-boot consumer, so the initramfs load in particular serves
+# nothing. On Secure Boot machines the load also fails outright --
+# the kernel under lockdown rejects the akmods-built module's
+# signature ("Failed to insert module 'nct6687': Key was rejected by
+# service", systemd-modules-load.service failed, verified on werewolf
+# 2026-11-01) -- while Secure-Boot-off machines load a driver for
+# hardware they may not have. Remove the autoload from the image;
+# the module stays installed, and moshke loads it through a local
+# /etc/modules-load.d/nct6687.conf, which the real system's
+# modules-load reads from the live /etc on every boot.
+rm -fv /usr/lib/modules-load.d/nct6687.conf
+
 sed -i 's/Kinoite/BrOS/g' /usr/lib/os-release
 
 ### Remove build-state files that would otherwise differ on every build
