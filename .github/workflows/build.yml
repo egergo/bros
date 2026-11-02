@@ -244,7 +244,11 @@ jobs:
         # while the image could not get past its initramfs. Runs before the
         # push steps, so an unbootable image is never published.
         if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true') && github.server_url == 'https://github.com'
-        timeout-minutes: 45
+        # The bcvk install alone took ~43 min on the nested-virt runner
+        # in run 41479789676 (copying 256 layers / 9.1 GB), and the step
+        # was killed 2 min into the SSH wait with the install complete
+        # and the VM created. Leave real headroom for the boot checks.
+        timeout-minutes: 120
         run: |
           set -euo pipefail
           VM=bros-boot-test
