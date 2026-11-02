@@ -221,6 +221,11 @@ jobs:
           # at exec time; without this it demands the group password and
           # fails on the non-tty runner shell.
           sudo usermod -a -G libvirt "$USER"
+          # bcvk writes its base disk directly into the default storage
+          # pool directory, which libvirt ships root-only; let the libvirt
+          # group write there.
+          sudo chown root:libvirt /var/lib/libvirt/images
+          sudo chmod 2775 /var/lib/libvirt/images
           # bcvk prebuilt binary, fetched the way its installation docs
           # describe: an OCI artifact pulled with oras.
           oras_tag="$(curl -fsSIL -o /dev/null -w '%{url_effective}' https://github.com/oras-project/oras/releases/latest | sed 's|.*/||')"
