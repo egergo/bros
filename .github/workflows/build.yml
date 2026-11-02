@@ -217,6 +217,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils virtiofsd libvirt-daemon-system libvirt-clients openssh-client ovmf
           sudo systemctl enable --now libvirtd
+          # sg (used by the boot test step) checks membership in /etc/group
+          # at exec time; without this it demands the group password and
+          # fails on the non-tty runner shell.
+          sudo usermod -a -G libvirt "$USER"
           # bcvk prebuilt binary, fetched the way its installation docs
           # describe: an OCI artifact pulled with oras.
           oras_tag="$(curl -fsSIL -o /dev/null -w '%{url_effective}' https://github.com/oras-project/oras/releases/latest | sed 's|.*/||')"
