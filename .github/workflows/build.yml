@@ -238,58 +238,97 @@ jobs:
 
       - name: Boot test the built image
         # Install the just-built image to a real disk with bcvk (which wraps
-        # `bootc install to-disk`) and boot it under libvirt. Fails the build
-        # if the image does not reach a running system over SSH. This is the
-        # check that would have caught PR #22: the container build was green
-        # while the image could not get past its initramfs. Runs before the
-        # push steps, so an unbootable image is never published.
+        # `bootc install to-disk`), boot it under libvirt, then inspect the
+        # guest from its disk. This is the check that would have caught
+        # PR #22: the container build was green while the image could not
+        # get past its initramfs. Runs before the push steps, so an
+        # unbootable image is never published.
+        #
+        # The verdict comes from the guest journal, NOT from logging in:
+        # this image enables no sshd, so bcvk's SSH (an injected root key
+        # via SMBIOS credentials, host-forwarded to localhost) can never
+        # connect. Runs 41479789676 and 41488765125 proved the install path
+        # works and then sat waiting on SSH that does not exist. Instead
+        # the guest gets a fixed boot window, is powered off, and its root
+        # filesystem is mounted read-only via qemu-nbd: the test asserts
+        # bcvk's injected /root/.ssh/authorized_keys exists (proof guest
+        # systemd-tmpfiles ran) and that the guest journal shows the
+        # graphical target was reached without emergency mode.
         if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true') && github.server_url == 'https://github.com'
-        # The bcvk install alone took ~43 min on the nested-virt runner
-        # in run 41479789676 (copying 256 layers / 9.1 GB), and the step
-        # was killed 2 min into the SSH wait with the install complete
-        # and the VM created. Leave real headroom for the boot checks.
+        # The bcvk install alone took ~35-43 min on the nested-virt runner
+        # (copying 256 layers / 9.1 GB); leave headroom for boot+inspect.
         timeout-minutes: 120
         run: |
           set -euo pipefail
           VM=bros-boot-test
+          DISK=/var/lib/libvirt/images/${VM}.qcow2
+          MNT=/tmp/guest-root
           # The runner user is not in the libvirt group in this shell (group
-          # changes need a new login), so run bcvk through sg.
-          LIBVIRT_BCVK() { sg libvirt -c "bcvk $*"; }
-          cleanup() { LIBVIRT_BCVK "libvirt rm ${VM}" || true; }
+          # changes need a new login), so run libvirt tools through sg.
+          SG() { sg libvirt -c "$*"; }
+          cleanup() {
+            sudo umount "${MNT}" 2>/dev/null || true
+            sudo qemu-nbd --disconnect /dev/nbd0 2>/dev/null || true
+            SG "bcvk libvirt rm --force ${VM}" || true
+          }
           trap cleanup EXIT
           # The image ships no bootc install config, so bootc install
           # to-disk needs an explicit filesystem; btrfs matches the
           # production deployments.
-          LIBVIRT_BCVK "libvirt run --name ${VM} --memory 8192 --cpus 4 --disk-size 64G --filesystem btrfs localhost/${IMAGE_NAME}:${DEFAULT_TAG}"
-          # Wait for SSH to come up at all (up to ~10 minutes).
-          up=0
-          for i in $(seq 1 60); do
-            if LIBVIRT_BCVK "libvirt ssh ${VM} 'true'" 2>/dev/null; then up=1; break; fi
+          SG "bcvk libvirt run --name ${VM} --memory 8192 --cpus 4 --disk-size 64G --filesystem btrfs localhost/${IMAGE_NAME}:${DEFAULT_TAG}"
+          # Fixed boot window: poll that QEMU keeps the domain running.
+          # A guest stuck in its initramfs also shows "running"; the
+          # journal assertions below are the real verdict.
+          echo "Giving the guest 300s to boot..."
+          for i in $(seq 1 30); do
+            state="$(SG "virsh domstate ${VM}" | xargs)"
+            if [ "${state}" != "running" ]; then
+              echo "VM left the running state during boot: ${state}"
+              exit 1
+            fi
             sleep 10
           done
-          if [ "${up}" != 1 ]; then
-            echo "VM did not answer SSH within 10 minutes"
+          SG "virsh destroy ${VM}" || true
+          # Attach the guest disk read-only and mount its root filesystem
+          # (the btrfs partition; the sysroot is its default subvolume).
+          sudo modprobe nbd max_part=16
+          sudo qemu-nbd --connect=/dev/nbd0 --read-only "${DISK}"
+          lsblk /dev/nbd0
+          ROOTDEV="$(lsblk -rno NAME,FSTYPE /dev/nbd0 | awk '$2=="btrfs"{print $1; exit}')"
+          echo "Guest root device: ${ROOTDEV}"
+          mkdir -p "${MNT}"
+          sudo mount -o ro "/dev/${ROOTDEV}" "${MNT}"
+          ls "${MNT}"
+          fail=0
+          # bcvk injects an ephemeral root SSH key via SMBIOS credentials;
+          # it lands in the guest only if systemd-tmpfiles ran there, i.e.
+          # real userspace came up.
+          if sudo bash -c "compgen -G '${MNT}/ostree/deploy/*/deploy/*/root/.ssh/authorized_keys' > /dev/null"; then
+            echo "PASS: guest processed the injected SSH credential (tmpfiles ran)"
+            sudo find "${MNT}/ostree" -name authorized_keys 2>/dev/null || true
+          else
+            echo "FAIL: no injected authorized_keys in the guest deployment"
+            fail=1
+          fi
+          # The decisive evidence: the guest's own journal.
+          echo "--- guest journal (last 40 lines) ---"
+          sudo journalctl --directory="${MNT}/var/log/journal" --no-pager -n 40 || true
+          JOURNAL="$(sudo journalctl --directory="${MNT}/var/log/journal" --no-pager 2>/dev/null || true)"
+          if echo "${JOURNAL}" | grep -q "Reached target graphical"; then
+            echo "PASS: guest reached the graphical target"
+          else
+            echo "FAIL: guest journal does not show the graphical target"
+            fail=1
+          fi
+          if echo "${JOURNAL}" | grep -q "emergency mode"; then
+            echo "FAIL: guest entered emergency mode"
+            fail=1
+          fi
+          if [ "${fail}" != 0 ]; then
+            echo "Boot test FAILED"
             exit 1
           fi
-          # Then wait for systemd to settle into running or degraded
-          # (degraded is acceptable for a desktop image in a VM; emergency
-          # or maintenance states are what this test exists to catch).
-          state=""
-          for i in $(seq 1 30); do
-            state="$(LIBVIRT_BCVK "libvirt ssh ${VM} 'systemctl is-system-running'" || true)"
-            case "${state}" in
-              running|degraded) break ;;
-            esac
-            sleep 10
-          done
-          echo "is-system-running: ${state}"
-          case "${state}" in
-            running|degraded) ;;
-            *) echo "VM did not reach a running state"; exit 1 ;;
-          esac
-          # Prove the booted deployment is the image this job built.
-          LIBVIRT_BCVK "libvirt ssh ${VM} 'bootc status'" | tee /tmp/bootc-status.txt
-          grep -q "${IMAGE_NAME}" /tmp/bootc-status.txt
+          echo "Boot test PASSED"
 
       - name: Push image to registry
         if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true') && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
