@@ -201,6 +201,80 @@ jobs:
             "${DEFAULT_TAG}" \
             "${ALIAS_TAGS}"
 
+      - name: Install boot test tooling (bcvk + libvirt)
+        # GitHub-hosted runners only: they provide /dev/kvm and can run the
+        # libvirt stack. The Gitea runner is an Incus VM without a verified
+        # KVM/libvirt setup, so the boot test is skipped there.
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true') && github.server_url == 'https://github.com'
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          # /dev/kvm exists on GitHub's ubuntu runners but is group-restricted;
+          # open it up the way bootc's own CI setup does.
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils virtiofsd libvirt-daemon-system libvirt-clients openssh-client ovmf
+          sudo systemctl enable --now libvirtd
+          # bcvk prebuilt binary, fetched the way its installation docs
+          # describe: an OCI artifact pulled with oras.
+          oras_tag="$(curl -fsSIL -o /dev/null -w '%{url_effective}' https://github.com/oras-project/oras/releases/latest | sed 's|.*/||')"
+          curl -fsSL "https://github.com/oras-project/oras/releases/download/${oras_tag}/oras_${oras_tag#v}_linux_amd64.tar.gz" | sudo tar -xz -C /usr/local/bin oras
+          mkdir -p /tmp/bcvk && cd /tmp/bcvk
+          oras pull ghcr.io/bootc-dev/bcvk-binary:x86_64-latest
+          tar -xzf bcvk-x86_64-unknown-linux-gnu.tar.gz
+          sudo install -m 755 bcvk-x86_64-unknown-linux-gnu /usr/local/bin/bcvk
+          ls -l /usr/local/bin/bcvk
+
+      - name: Boot test the built image
+        # Install the just-built image to a real disk with bcvk (which wraps
+        # `bootc install to-disk`) and boot it under libvirt. Fails the build
+        # if the image does not reach a running system over SSH. This is the
+        # check that would have caught PR #22: the container build was green
+        # while the image could not get past its initramfs. Runs before the
+        # push steps, so an unbootable image is never published.
+        if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true') && github.server_url == 'https://github.com'
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          VM=bros-boot-test
+          # The runner user is not in the libvirt group in this shell (group
+          # changes need a new login), so run bcvk through sg.
+          LIBVIRT_BCVK() { sg libvirt -c "bcvk $*"; }
+          cleanup() { LIBVIRT_BCVK "libvirt rm ${VM}" || true; }
+          trap cleanup EXIT
+          LIBVIRT_BCVK "libvirt run --name ${VM} --memory 8192 --cpus 4 --disk-size 64G ${IMAGE_NAME}:${DEFAULT_TAG}"
+          # Wait for SSH to come up at all (up to ~10 minutes).
+          up=0
+          for i in $(seq 1 60); do
+            if LIBVIRT_BCVK "libvirt ssh ${VM} 'true'" 2>/dev/null; then up=1; break; fi
+            sleep 10
+          done
+          if [ "${up}" != 1 ]; then
+            echo "VM did not answer SSH within 10 minutes"
+            exit 1
+          fi
+          # Then wait for systemd to settle into running or degraded
+          # (degraded is acceptable for a desktop image in a VM; emergency
+          # or maintenance states are what this test exists to catch).
+          state=""
+          for i in $(seq 1 30); do
+            state="$(LIBVIRT_BCVK "libvirt ssh ${VM} 'systemctl is-system-running'" || true)"
+            case "${state}" in
+              running|degraded) break ;;
+            esac
+            sleep 10
+          done
+          echo "is-system-running: ${state}"
+          case "${state}" in
+            running|degraded) ;;
+            *) echo "VM did not reach a running state"; exit 1 ;;
+          esac
+          # Prove the booted deployment is the image this job built.
+          LIBVIRT_BCVK "libvirt ssh ${VM} 'bootc status'" | tee /tmp/bootc-status.txt
+          grep -q "${IMAGE_NAME}" /tmp/bootc-status.txt
+
       - name: Push image to registry
         if: success() && (github.event_name != 'schedule' || steps.check.outputs.changed == 'true') && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         id: push-image
