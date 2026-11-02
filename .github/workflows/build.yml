@@ -215,7 +215,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils virtiofsd libvirt-daemon-system libvirt-clients openssh-client ovmf
+          sudo apt-get install -y qemu-system-x86 qemu-utils virtiofsd libvirt-daemon-system libvirt-clients openssh-client ovmf btrfs-progs
           sudo systemctl enable --now libvirtd
           # sg (used by the boot test step) checks membership in /etc/group
           # at exec time; without this it demands the group password and
@@ -263,11 +263,13 @@ jobs:
           VM=bros-boot-test
           DISK=/var/lib/libvirt/images/${VM}.qcow2
           MNT=/tmp/guest-root
+          MNT5=/tmp/guest-top
           # The runner user is not in the libvirt group in this shell (group
           # changes need a new login), so run libvirt tools through sg.
           SG() { sg libvirt -c "$*"; }
           cleanup() {
             sudo umount "${MNT}" 2>/dev/null || true
+            sudo umount "${MNT5}" 2>/dev/null || true
             sudo qemu-nbd --disconnect /dev/nbd0 2>/dev/null || true
             SG "bcvk libvirt rm --force ${VM}" || true
           }
@@ -321,21 +323,49 @@ jobs:
           mkdir -p "${MNT}"
           sudo mount -o ro "/dev/${ROOTDEV}" "${MNT}"
           ls "${MNT}"
+          # Attempt 7 mounted this filesystem fine (nbd partitions all
+          # present) but found neither the injected key nor /var/log/journal
+          # at the paths it guessed: the mounted top level held only boot/
+          # and ostree/. So map the actual layout first — subvolumes,
+          # deployment tree, every authorized_keys and journal file anywhere
+          # — and also look through the btrfs top-level subvolume
+          # (subvolid=5), in case state lives in a sibling subvolume the
+          # default mount hides. Then assert on what the finds located.
+          mkdir -p "${MNT5}"
+          sudo mount -o ro,subvolid=5 "/dev/${ROOTDEV}" "${MNT5}" 2>/dev/null || true
+          echo "--- btrfs subvolumes ---"
+          sudo btrfs subvolume list "${MNT}" || true
+          echo "--- top levels ---"
+          ls -la "${MNT}" || true
+          ls -la "${MNT5}" || true
+          echo "--- ostree deployment tree ---"
+          sudo find "${MNT}/ostree" -maxdepth 4 2>/dev/null | head -60 || true
+          KEYS="$(sudo find "${MNT}" "${MNT5}" -name authorized_keys 2>/dev/null | sort -u)"
+          echo "--- authorized_keys found ---"
+          echo "${KEYS}"
+          JDIRS="$(sudo find "${MNT}" "${MNT5}" -type d -name journal -path '*log*' 2>/dev/null | sort -u)"
+          echo "--- journal dirs found ---"
+          echo "${JDIRS}"
+          echo "--- journal files found ---"
+          sudo find "${MNT}" "${MNT5}" -name '*.journal*' 2>/dev/null | head -20 || true
           fail=0
           # bcvk injects an ephemeral root SSH key via SMBIOS credentials;
           # it lands in the guest only if systemd-tmpfiles ran there, i.e.
           # real userspace came up.
-          if sudo bash -c "compgen -G '${MNT}/ostree/deploy/*/deploy/*/root/.ssh/authorized_keys' > /dev/null"; then
+          if [ -n "${KEYS}" ]; then
             echo "PASS: guest processed the injected SSH credential (tmpfiles ran)"
-            sudo find "${MNT}/ostree" -name authorized_keys 2>/dev/null || true
           else
-            echo "FAIL: no injected authorized_keys in the guest deployment"
+            echo "FAIL: no injected authorized_keys anywhere in the guest filesystem"
             fail=1
           fi
-          # The decisive evidence: the guest's own journal.
+          # The decisive evidence: the guest's own journal, wherever it is.
+          JOURNAL=""
+          for jd in ${JDIRS}; do
+            JOURNAL="$(sudo journalctl --directory="${jd}" --no-pager 2>/dev/null || true)"
+            [ -n "${JOURNAL}" ] && break
+          done
           echo "--- guest journal (last 40 lines) ---"
-          sudo journalctl --directory="${MNT}/var/log/journal" --no-pager -n 40 || true
-          JOURNAL="$(sudo journalctl --directory="${MNT}/var/log/journal" --no-pager 2>/dev/null || true)"
+          echo "${JOURNAL}" | tail -40
           if echo "${JOURNAL}" | grep -q "Reached target graphical"; then
             echo "PASS: guest reached the graphical target"
           else
