@@ -253,7 +253,10 @@ jobs:
           LIBVIRT_BCVK() { sg libvirt -c "bcvk $*"; }
           cleanup() { LIBVIRT_BCVK "libvirt rm ${VM}" || true; }
           trap cleanup EXIT
-          LIBVIRT_BCVK "libvirt run --name ${VM} --memory 8192 --cpus 4 --disk-size 64G localhost/${IMAGE_NAME}:${DEFAULT_TAG}"
+          # The image ships no bootc install config, so bootc install
+          # to-disk needs an explicit filesystem; btrfs matches the
+          # production deployments.
+          LIBVIRT_BCVK "libvirt run --name ${VM} --memory 8192 --cpus 4 --disk-size 64G --filesystem btrfs localhost/${IMAGE_NAME}:${DEFAULT_TAG}"
           # Wait for SSH to come up at all (up to ~10 minutes).
           up=0
           for i in $(seq 1 60); do
