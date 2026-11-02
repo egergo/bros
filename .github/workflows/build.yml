@@ -291,11 +291,33 @@ jobs:
           SG "virsh destroy ${VM}" || true
           # Attach the guest disk read-only and mount its root filesystem
           # (the btrfs partition; the sysroot is its default subvolume).
-          sudo modprobe nbd max_part=16
+          # Run 41507294152 showed no partitions at all on nbd0 (one leg
+          # even read size 0B the second after --connect): either the nbd
+          # module was already loaded without max_part, so the kernel made
+          # no partition devices, or the device had not settled yet. Guard
+          # both: verify/reload the module parameter first, then poll with
+          # a partition re-read until the btrfs partition shows up.
+          echo "nbd max_part: $(cat /sys/module/nbd/parameters/max_part 2>/dev/null || echo '?')"
+          if [ "$(cat /sys/module/nbd/parameters/max_part 2>/dev/null || echo 0)" = "0" ]; then
+            sudo modprobe -r nbd 2>/dev/null || true
+            sudo modprobe nbd max_part=16
+            echo "nbd max_part after reload: $(cat /sys/module/nbd/parameters/max_part 2>/dev/null || echo '?')"
+          fi
           sudo qemu-nbd --connect=/dev/nbd0 --read-only "${DISK}"
+          ROOTDEV=""
+          for i in $(seq 1 15); do
+            sudo blockdev --rereadpt /dev/nbd0 2>/dev/null || true
+            ROOTDEV="$(lsblk -rno NAME,FSTYPE /dev/nbd0 | awk '$2=="btrfs"{print $1; exit}')"
+            [ -n "${ROOTDEV}" ] && break
+            sleep 2
+          done
           lsblk /dev/nbd0
-          ROOTDEV="$(lsblk -rno NAME,FSTYPE /dev/nbd0 | awk '$2=="btrfs"{print $1; exit}')"
           echo "Guest root device: ${ROOTDEV}"
+          if [ -z "${ROOTDEV}" ]; then
+            echo "No btrfs partition appeared on /dev/nbd0; partition table:"
+            sudo fdisk -l /dev/nbd0 || true
+            exit 1
+          fi
           mkdir -p "${MNT}"
           sudo mount -o ro "/dev/${ROOTDEV}" "${MNT}"
           ls "${MNT}"
