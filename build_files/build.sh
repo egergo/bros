@@ -118,7 +118,8 @@ dnf install -y --setopt=tsflags=noscripts \
     kmodtool \
     gcc \
     make \
-    nct6687d
+    nct6687d \
+    hid-tmff2
 
 KERNEL="$(ls -1 /usr/lib/modules | sort -V | tail -1)"
 
